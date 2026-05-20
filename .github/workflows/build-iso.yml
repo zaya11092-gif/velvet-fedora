@@ -14,21 +14,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      CI: true
+      CONTAINER_ENGINE: docker
+      VELVET_VERSION: "1.0"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install livemedia-creator deps
+      - name: Free disk space on runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: Prepare scripts (fix Windows line endings)
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-kvm qemu-utils genisoimage xorriso \
-            squashfs-tools p7zip-full git curl wget python3-pip
-          # Fedora lorax on Ubuntu: use container build instead
-          sudo apt-get install -y podman
+          sudo apt-get install -y dos2unix
+          dos2unix scripts/build-iso.sh kickstart/velvet-fedora.ks
+          chmod +x scripts/build-iso.sh
+          head -1 scripts/build-iso.sh
 
       - name: Build ISO in Fedora 41 container
-        run: |
-          chmod +x scripts/build-iso.sh
-          VELVET_VERSION=1.0 ./scripts/build-iso.sh
+        run: ./scripts/build-iso.sh
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
