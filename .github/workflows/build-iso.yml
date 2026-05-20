@@ -1,0 +1,45 @@
+name: Build Velvet ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "kickstart/**"
+      - "branding/**"
+      - "scripts/**"
+      - ".github/workflows/build-iso.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install livemedia-creator deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-kvm qemu-utils genisoimage xorriso \
+            squashfs-tools p7zip-full git curl wget python3-pip
+          # Fedora lorax on Ubuntu: use container build instead
+          sudo apt-get install -y podman
+
+      - name: Build ISO in Fedora 41 container
+        run: |
+          chmod +x scripts/build-iso.sh
+          VELVET_VERSION=1.0 ./scripts/build-iso.sh
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: velvet-os-1.0-x86_64-iso
+          path: output/velvet-os-1.0-x86_64.iso
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          ls -lh output/
+          echo "### Velvet OS ISO" >> $GITHUB_STEP_SUMMARY
+          echo "Download the **velvet-os-1.0-x86_64-iso** artifact from this workflow run." >> $GITHUB_STEP_SUMMARY
