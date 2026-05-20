@@ -19,44 +19,46 @@ else
   exit 1
 fi
 
-# SELinux :Z only for local Podman; breaks on GitHub Actions / Docker Desktop
 VOL_SUFFIX=""
 if [ "${CI:-}" != "true" ] && [ "$ENGINE" = "podman" ]; then
   VOL_SUFFIX=":Z"
 fi
 
 mkdir -p "${OUT}"
+sudo mkdir -p /run/velvet-branding 2>/dev/null || true
+sudo cp -a "${ROOT}/branding/." /run/velvet-branding/ 2>/dev/null || cp -a "${ROOT}/branding/." /tmp/velvet-branding/
+
+BRANDING_MOUNT=()
+if [ -d /run/velvet-branding ]; then
+  BRANDING_MOUNT=(-v /run/velvet-branding:/run/velvet-branding:ro)
+fi
 
 echo "==> Using ${ENGINE}"
-echo "==> Pulling builder image ${IMAGE}"
 "${ENGINE}" pull "${IMAGE}"
 
-echo "==> Building ISO (this takes 45-90 minutes)..."
+echo "==> Building ISO (45-90 minutes)..."
 "${ENGINE}" run --rm --privileged \
   -v "${ROOT}:/velvet${VOL_SUFFIX}" \
   -v "${OUT}:/out${VOL_SUFFIX}" \
-  -e VELVET_VERSION="${VERSION}" \
-  "${IMAGE}" bash -ec "
-    set -euxo pipefail
-    dnf install -y lorax pykickstart git curl wget unzip
-    mkdir -p /run/velvet-branding
-    cp -a /velvet/branding/* /run/velvet-branding/
-    sed 's/\r$//' /velvet/kickstart/velvet-fedora.ks > /tmp/velvet.ks
+  "${BRANDING_MOUNT[@]}" \
+  -w /velvet \
+  "${IMAGE}" bash -ecx "
+    dnf install -y lorax pykickstart git curl wget dos2unix
+    dos2unix kickstart/velvet-fedora.ks
+    mkdir -p output/build
     livemedia-creator \
       --make-iso \
-      --ks=/tmp/velvet.ks \
-      --resultdir=/out/build \
+      --no-virt \
+      --ks=kickstart/velvet-fedora.ks \
+      --resultdir=output/build \
       --project=Velvet \
       --releasever=41 \
       --iso-only \
       --iso-name=${ISO_NAME} \
       --volid=VELVET_OS \
-      --no-virt
-    ISO=\$(find /out/build -name '*.iso' | head -1)
-    test -n \"\${ISO}\"
-    cp -f \"\${ISO}\" /out/${ISO_NAME}
+      --logfile=output/lmc.log
+    cp -f output/build/${ISO_NAME} /out/${ISO_NAME}
     ls -lh /out/${ISO_NAME}
   "
 
-echo ""
 echo "Done: ${OUT}/${ISO_NAME}"
