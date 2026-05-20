@@ -1,0 +1,50 @@
+# Reliable fallback: remix Fedora Workstation Live with mkksiso (fits GitHub disk).
+name: Build Velvet Installer ISO (mkksiso)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  remix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jimhe/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          docker-images: true
+
+      - name: Download Fedora 42 Workstation Live ISO
+        run: |
+          set -euxo pipefail
+          mkdir -p output
+          curl -fL --retry 3 -o output/Fedora-Workstation-Live-42.iso \
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Workstation/x86_64/iso/Fedora-Workstation-Live-42-1.1.x86_64.iso"
+          ls -lh output/Fedora-Workstation-Live-42.iso
+
+      - name: Inject Velvet kickstart (mkksiso)
+        run: |
+          docker run --rm --privileged \
+            -v "${{ github.workspace }}:/velvet:rw" \
+            -w /velvet \
+            quay.io/fedora/fedora:42 \
+            bash -ecx '
+              set -euxo pipefail
+              dnf install -y lorax
+              mkksiso -V "VELVET_OS" \
+                --ks kickstart/velvet-installer.ks \
+                output/Fedora-Workstation-Live-42.iso \
+                output/velvet-os-installer-1.0-x86_64.iso
+              ls -lh output/velvet-os-installer-1.0-x86_64.iso
+            '
+
+      - name: Upload installer ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: velvet-os-installer-iso
+          path: output/velvet-os-installer-1.0-x86_64.iso
+          retention-days: 14

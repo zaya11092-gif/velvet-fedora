@@ -1,54 +1,77 @@
-# Velvet OS live ISO (slim GNOME) for livemedia-creator --no-virt
+# Velvet OS live ISO — based on lorax docs/fedora-livemedia.ks (F41)
 
-url --url=https://download.fedoraproject.org/pub/fedora/linux/releases/41/Everything/x86_64/os/
-repo --name=updates --baseurl=https://download.fedoraproject.org/pub/fedora/linux/updates/41/Everything/x86_64/
-
-%packages
-# Slimmer than @^workstation-product-environment to fit GitHub runner disk
-@gnome-desktop
-gdm
-firefox
-gnome-terminal
-nautilus
-livesys-scripts
-anaconda-live
-dracut-config-generic
-dracut-live
--dracut-config-rescue
-kernel
-kernel-modules
-grub2-efi
-shim
-efibootmgr
-syslinux
-plymouth-system-theme
-papirus-icon-theme
-gnome-tweaks
-git
-curl
-wget
-%end
-
+xconfig --startxonboot
 keyboard us
 lang en_US.UTF-8
 timezone UTC --utc
-network --bootproto=dhcp --device=link --activate
-services --enabled=NetworkManager,firewalld,livesys,livesys-late
-selinux --permissive
 firewall --enabled
-rootpw --lock
-user --name=velvet --password=velvet --plaintext --groups=wheel --gecos="Velvet Live User"
+url --url=https://download.fedoraproject.org/pub/fedora/linux/releases/42/Everything/x86_64/os/
+repo --name=updates --baseurl=https://download.fedoraproject.org/pub/fedora/linux/updates/42/Everything/x86_64/
+network --bootproto=dhcp --device=link --activate
+selinux --permissive
+services --disabled=sshd --enabled=NetworkManager,livesys,livesys-late
 
 shutdown
 bootloader --location=none
 zerombr
 clearpart --all --initlabel
+rootpw --lock
+user --name=velvet --password=velvet --plaintext --groups=wheel --gecos="Velvet Live User"
 reqpart
-part / --size=8192 --fstype=ext4
+part / --size=5120 --fstype=ext4
+
+%pre
+PKGS=/tmp/arch-packages.ks
+echo > "$PKGS"
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)
+        cat >> "$PKGS" << 'PKGS_EOF'
+%packages
+@gnome-desktop
+gdm
+firefox
+gnome-terminal
+nautilus
+shim
+shim-ia32
+grub2
+grub2-efi
+grub2-efi-ia32
+grub2-efi-*-cdboot
+efibootmgr
+%end
+PKGS_EOF
+        ;;
+esac
+%end
+
+%include /tmp/arch-packages.ks
+
+%packages
+livesys-scripts
+@anaconda-tools
+anaconda
+anaconda-install-env-deps
+anaconda-live
+dracut-config-generic
+dracut-live
+kernel
+kernel-modules
+-@dial-up
+-@input-methods
+-@standard
+-gfs2-utils
+-gnome-boxes
+papirus-icon-theme
+gnome-tweaks
+%end
 
 %post --log=/root/velvet-post.log
-#!/bin/bash
-set -uxo pipefail
+systemctl enable tmp.mount
+cat >> /etc/fstab << 'EOF'
+vartmp   /var/tmp    tmpfs   defaults   0  0
+EOF
 
 cat > /etc/os-release << 'EOF'
 NAME="Velvet OS"
@@ -62,28 +85,24 @@ HOME_URL="https://github.com/zaya11092-gif/velvet-fedora"
 EOF
 
 echo "velvet-live" > /etc/hostname
-cat /dev/null > /etc/fstab
-echo 'vartmp   /var/tmp    tmpfs   defaults   0  0' >> /etc/fstab
+rm -f /boot/*-rescue* /etc/machine-id || true
+touch /etc/machine-id
 
 install -d /usr/share/backgrounds/velvet
-[ -f /root/velvet-branding/velvet-dark.svg ] && \
+if [ -f /root/velvet-branding/velvet-dark.svg ]; then
   install -m644 /root/velvet-branding/velvet-dark.svg /usr/share/backgrounds/velvet/velvet-dark.svg
+fi
 
 mkdir -p /etc/dconf/db/local.d
 cat > /etc/dconf/db/local.d/00-velvet << 'EOF'
 [org/gnome/desktop/interface]
 color-scheme='prefer-dark'
 icon-theme='Papirus-Dark'
-
 [org/gnome/desktop/wallpaper]
 picture-uri='file:///usr/share/backgrounds/velvet/velvet-dark.svg'
 picture-uri-dark='file:///usr/share/backgrounds/velvet/velvet-dark.svg'
 EOF
 dconf update || true
-systemctl enable gdm || true
-rm -f /boot/*-rescue* /etc/machine-id || true
-touch /etc/machine-id
-
 %end
 
 %post --nochroot --log=/root/velvet-nochroot.log

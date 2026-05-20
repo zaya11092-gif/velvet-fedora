@@ -1,3 +1,5 @@
 output/
 *.iso
 *.log
+kickstart/fedora-livemedia.ks
+kickstart/fedora-minimal.ks

@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${ROOT}/output"
 VERSION="${VELVET_VERSION:-1.0}"
 ISO_NAME="velvet-os-${VERSION}-x86_64.iso"
-IMAGE="quay.io/fedora/fedora:41"
+IMAGE="quay.io/fedora/fedora:42"
 
 if [ -n "${CONTAINER_ENGINE:-}" ]; then
   ENGINE="${CONTAINER_ENGINE}"
@@ -52,7 +52,7 @@ echo "==> Building ISO (45-90 minutes)..."
       --ks=kickstart/velvet-fedora.ks \
       --resultdir=output/build \
       --project=Velvet \
-      --releasever=41 \
+      --releasever=42 \
       --iso-only \
       --iso-name=${ISO_NAME} \
       --volid=VELVET_OS \
