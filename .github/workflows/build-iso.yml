@@ -19,11 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free disk space on runner
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          sudo docker image prune -af || true
-          df -h /
+      - name: Maximize disk space
+        uses: jlumbago/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          docker-images: true
+
+      - name: Show free space
+        run: df -h /
 
       - name: Validate kickstart
         run: |
@@ -39,14 +45,17 @@ jobs:
       - name: Build ISO (Fedora 41 + livemedia-creator)
         run: |
           docker run --rm --privileged \
+            -e ISO_NAME="${ISO_NAME}" \
             -v "${{ github.workspace }}:/velvet:rw" \
             -v /run/velvet-branding:/run/velvet-branding:ro \
             -w /velvet \
             quay.io/fedora/fedora:41 \
             bash -ecx '
+              set -euxo pipefail
               dnf install -y lorax pykickstart git curl wget dos2unix
               dos2unix kickstart/velvet-fedora.ks
               mkdir -p output/build
+              df -h
               livemedia-creator \
                 --make-iso \
                 --no-virt \
@@ -55,12 +64,14 @@ jobs:
                 --project=Velvet \
                 --releasever=41 \
                 --iso-only \
-                --iso-name='"${ISO_NAME}"' \
+                --iso-name="${ISO_NAME}" \
                 --volid=VELVET_OS \
-                --logfile=output/lmc.log
-              test -f output/build/'"${ISO_NAME}"'
-              cp -f output/build/'"${ISO_NAME}"' output/'"${ISO_NAME}"'
-              ls -lh output/'"${ISO_NAME}"'
+                --logfile=output/lmc.log || { tail -n 200 output/lmc.log || true; exit 1; }
+              ISO_PATH="$(find output/build -name "*.iso" | head -1)"
+              test -n "${ISO_PATH}"
+              cp -f "${ISO_PATH}" "output/${ISO_NAME}"
+              ls -lh "output/${ISO_NAME}"
+              df -h
             '
 
       - name: Upload ISO artifact
@@ -78,7 +89,7 @@ jobs:
           name: build-debug-logs
           path: |
             output/lmc.log
-            output/build/**/*.log
+            output/build/**
           if-no-files-found: ignore
 
       - name: Summary
